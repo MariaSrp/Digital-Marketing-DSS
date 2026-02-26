@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 
+
 st.set_page_config(page_title="Digital Marketing Decision Support System", layout="wide")
 st.title("Digital Marketing DSS")
 
@@ -69,7 +70,7 @@ if uploaded is not None:
         st.metric("Total revenue", f"{total_revenue:,.0f}")
         st.metric("Average ROAS", f"{avg_roas:.2f}")
 
-        # 4) ROAS trend over time (7‑day comparison idea)
+        # 4) ROAS trend over time
         st.subheader("ROAS trend over time")
 
         if "c_date" in camp_df.columns and "ROAS" in camp_df.columns:
@@ -79,6 +80,62 @@ if uploaded is not None:
             st.info("Cannot plot trend – missing c_date or ROAS.")
     else:
         st.info("campaign_name column not found in dataset.")
+
+    # ================================
+    # 5) Alert Detail Popup (Mock-Up)
+    # ================================
+    st.markdown("---")
+    st.subheader("Alert detail popup (mock-up)")
+
+    if "ROAS" in df.columns and "campaign_name" in df.columns:
+
+        # Only show popup for the campaign currently selected in drill-down
+        if "selected_campaign" in locals():
+            camp_roas = camp_df["ROAS"].mean()
+
+            if camp_roas < 1:
+                # This campaign is in the red zone -> show alert detail
+                with st.container(border=True):
+                    st.markdown(f"### Alert details: `{selected_campaign}`")
+                    st.write(f"Total spend: €{total_spend:,.0f}")
+                    st.write(f"Total revenue: €{total_revenue:,.0f}")
+                    st.write(f"ROAS: {camp_roas:.2f} (below target 1.0)")
+
+                    st.markdown("**Recommended actions**")
+                    st.write(
+                        "1. **Pause campaign** to stop immediate losses.\n"
+                        "2. **Reduce daily budget by 50%** while you test fixes.\n"
+                        "3. **Investigate root causes:** targeting, creatives, and landing page."
+                    )
+
+                    c1, c2, c3 = st.columns(3)
+
+                    with c1:
+                        if st.button("Pause campaign (simulate)"):
+                            st.success(
+                                f"Campaign '{selected_campaign}' marked as PAUSED (simulation)."
+                            )
+
+                    with c2:
+                        if st.button("Reduce budget 50% (simulate)"):
+                            st.success(
+                                f"Budget for '{selected_campaign}' reduced by 50% (simulation)."
+                            )
+
+                    with c3:
+                        if st.button("Investigate (simulate)"):
+                            st.info(
+                                "Next steps: check targeting settings, review ad creatives, "
+                                "and analyze landing page conversion rate."
+                            )
+            else:
+                st.info(
+                    "The selected campaign is not a red alert (ROAS ≥ 1.0), so no critical popup is shown."
+                )
+        else:
+            st.info("Select a campaign above to view alert details.")
+    else:
+        st.info("Alert detail panel requires ROAS and campaign_name columns.")
 
 else:
     st.info("Upload the approved marketing dataset to begin.")

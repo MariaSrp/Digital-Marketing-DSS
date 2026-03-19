@@ -1,9 +1,16 @@
 import streamlit as st
 import pandas as pd
-
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="Digital Marketing Decision Support System", layout="wide")
 st.title("Digital Marketing DSS")
+
+# --- Simple auto-refresh (every 10 seconds) ---
+count = st_autorefresh(interval=10000, limit=None, key="autorefresh")
+
+# --- Session state for action log ---
+if "action_log" not in st.session_state:
+    st.session_state["action_log"] = []
 
 st.subheader("Step 1 – Load marketing dataset")
 
@@ -18,12 +25,28 @@ if uploaded is not None:
     if "c_date" in df.columns:
         df["c_date"] = pd.to_datetime(df["c_date"])
 
+    # Add status column if missing
+    if "status" not in df.columns:
+        df["status"] = "ACTIVE"
+
     # 1) Compute ROAS and CPA (if columns exist)
     if "revenue" in df.columns and "mark_spent" in df.columns:
         df["ROAS"] = df["revenue"] / df["mark_spent"]
 
     if "mark_spent" in df.columns and "orders" in df.columns:
         df["CPA"] = df["mark_spent"] / df["orders"]
+
+    # --- Time simulation / auto-advance by date ---
+    if "c_date" in df.columns:
+        df = df.sort_values("c_date")
+        unique_dates = sorted(df["c_date"].unique())
+
+        # each refresh step reveals one more date
+        step = min(count, len(unique_dates) - 1)
+        current_date = unique_dates[step]
+
+        st.info(f"Simulated current date: {current_date.date()}")
+        df = df[df["c_date"] <= current_date]
 
     # 2) Show ROAS alerts with colors
     st.subheader("ROAS alerts")
@@ -37,7 +60,7 @@ if uploaded is not None:
             else:
                 return "background-color: #d4edda"   # green (good)
 
-        alert_cols = ["campaign_name", "category", "mark_spent", "revenue", "ROAS"]
+        alert_cols = ["campaign_name", "category", "mark_spent", "revenue", "ROAS", "status"]
         existing_cols = [c for c in alert_cols if c in df.columns]
 
         styled = df[existing_cols].style.applymap(roas_color, subset=["ROAS"])
@@ -57,9 +80,9 @@ if uploaded is not None:
         camp_df = df[df["campaign_name"] == selected_campaign]
 
         st.write("Details for:", selected_campaign)
-        st.dataframe(
-            camp_df[["c_date", "category", "mark_spent", "revenue", "ROAS"]]
-        )
+        cols_to_show = ["c_date", "category", "mark_spent", "revenue", "ROAS", "status"]
+        cols_to_show = [c for c in cols_to_show if c in camp_df.columns]
+        st.dataframe(camp_df[cols_to_show])
 
         # Summary metrics
         total_spend = camp_df["mark_spent"].sum()
@@ -82,19 +105,17 @@ if uploaded is not None:
         st.info("campaign_name column not found in dataset.")
 
     # ================================
-    # 5) Alert Detail Popup (Mock-Up)
+    # 5) Alert Detail Popup (Simulation)
     # ================================
     st.markdown("---")
-    st.subheader("Alert detail popup (mock-up)")
+    st.subheader("Alert detail popup (simulation)")
 
     if "ROAS" in df.columns and "campaign_name" in df.columns:
 
-        # Only show popup for the campaign currently selected in drill-down
         if "selected_campaign" in locals():
             camp_roas = camp_df["ROAS"].mean()
 
             if camp_roas < 1:
-                # This campaign is in the red zone -> show alert detail
                 with st.container(border=True):
                     st.markdown(f"### Alert details: `{selected_campaign}`")
                     st.write(f"Total spend: €{total_spend:,.0f}")
@@ -110,20 +131,33 @@ if uploaded is not None:
 
                     c1, c2, c3 = st.columns(3)
 
+                    # Pause button updates status and logs action
                     with c1:
                         if st.button("Pause campaign (simulate)"):
+                            df.loc[df["campaign_name"] == selected_campaign, "status"] = "PAUSED_BY_SYSTEM"
+                            st.session_state["action_log"].append(
+                                {"campaign": selected_campaign, "action": "pause"}
+                            )
                             st.success(
                                 f"Campaign '{selected_campaign}' marked as PAUSED (simulation)."
                             )
 
+                    # Reduce budget button halves mark_spent and logs action
                     with c2:
                         if st.button("Reduce budget 50% (simulate)"):
+                            df.loc[df["campaign_name"] == selected_campaign, "mark_spent"] *= 0.5
+                            st.session_state["action_log"].append(
+                                {"campaign": selected_campaign, "action": "reduce_budget_50"}
+                            )
                             st.success(
                                 f"Budget for '{selected_campaign}' reduced by 50% (simulation)."
                             )
 
                     with c3:
                         if st.button("Investigate (simulate)"):
+                            st.session_state["action_log"].append(
+                                {"campaign": selected_campaign, "action": "investigate"}
+                            )
                             st.info(
                                 "Next steps: check targeting settings, review ad creatives, "
                                 "and analyze landing page conversion rate."
@@ -136,6 +170,11 @@ if uploaded is not None:
             st.info("Select a campaign above to view alert details.")
     else:
         st.info("Alert detail panel requires ROAS and campaign_name columns.")
+
+    # --- Show action log ---
+    st.markdown("---")
+    st.subheader("Action log (simulation)")
+    st.write(st.session_state["action_log"])
 
 else:
     st.info("Upload the approved marketing dataset to begin.")
